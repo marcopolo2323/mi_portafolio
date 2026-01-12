@@ -5,20 +5,50 @@ import { Card, CardContent, CardHeader } from '@/app/components/ui/Card';
 import { Button } from '@/app/components/ui/Button';
 import { CONTACT_INFO, SOCIAL_LINKS } from '@/lib/constants';
 import { SocialIcon } from '@/app/components/ui/SocialIcon';
+import { sendEmail, validateForm, type ContactFormData } from '@/lib/emailService';
 
 export function Contact() {
-  const [formData, setFormData] = useState({
+  const [formData, setFormData] = useState<ContactFormData>({
     name: '',
     email: '',
     subject: '',
     message: ''
   });
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [submitStatus, setSubmitStatus] = useState<'idle' | 'success' | 'error'>('idle');
+  const [errors, setErrors] = useState<string[]>([]);
+
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Formulario enviado:', formData);
-    alert('¡Mensaje enviado! Te contactaré pronto.');
-    setFormData({ name: '', email: '', subject: '', message: '' });
+    
+    // Validar formulario
+    const validationErrors = validateForm(formData);
+    if (validationErrors.length > 0) {
+      setErrors(validationErrors);
+      return;
+    }
+
+    setIsSubmitting(true);
+    setErrors([]);
+    setSubmitStatus('idle');
+
+    try {
+      const success = await sendEmail(formData);
+      
+      if (success) {
+        setSubmitStatus('success');
+        setFormData({ name: '', email: '', subject: '', message: '' });
+      } else {
+        setSubmitStatus('error');
+        setErrors(['Error al enviar el mensaje. Por favor, intenta de nuevo.']);
+      }
+    } catch (error) {
+      setSubmitStatus('error');
+      setErrors(['Error inesperado. Por favor, intenta de nuevo más tarde.']);
+    } finally {
+      setIsSubmitting(false);
+    }
   };
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -26,6 +56,11 @@ export function Contact() {
       ...formData,
       [e.target.name]: e.target.value
     });
+    
+    // Limpiar errores cuando el usuario empiece a escribir
+    if (errors.length > 0) {
+      setErrors([]);
+    }
   };
 
   return (
@@ -101,11 +136,36 @@ export function Contact() {
               </h3>
             </CardHeader>
             <CardContent>
+              {/* Mensajes de estado */}
+              {submitStatus === 'success' && (
+                <div className="mb-6 p-4 bg-green-50 border border-green-200 rounded-lg">
+                  <p className="text-green-800 font-medium">
+                    ¡Mensaje enviado exitosamente! 🎉
+                  </p>
+                  <p className="text-green-600 text-sm mt-1">
+                    Te contactaré pronto. Gracias por tu mensaje.
+                  </p>
+                </div>
+              )}
+
+              {errors.length > 0 && (
+                <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg">
+                  <p className="text-red-800 font-medium mb-2">
+                    Por favor, corrige los siguientes errores:
+                  </p>
+                  <ul className="text-red-600 text-sm space-y-1">
+                    {errors.map((error, index) => (
+                      <li key={index}>• {error}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
               <form onSubmit={handleSubmit} className="space-y-6">
                 <div className="grid sm:grid-cols-2 gap-4">
                   <div>
                     <label htmlFor="name" className="block text-sm font-medium text-neutral-700 mb-2">
-                      Nombre
+                      Nombre *
                     </label>
                     <input
                       type="text"
@@ -114,12 +174,14 @@ export function Contact() {
                       value={formData.name}
                       onChange={handleChange}
                       required
-                      className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent"
+                      disabled={isSubmitting}
+                      className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent disabled:bg-neutral-100 disabled:cursor-not-allowed"
+                      placeholder="Tu nombre completo"
                     />
                   </div>
                   <div>
                     <label htmlFor="email" className="block text-sm font-medium text-neutral-700 mb-2">
-                      Email
+                      Email *
                     </label>
                     <input
                       type="email"
@@ -128,14 +190,16 @@ export function Contact() {
                       value={formData.email}
                       onChange={handleChange}
                       required
-                      className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent"
+                      disabled={isSubmitting}
+                      className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent disabled:bg-neutral-100 disabled:cursor-not-allowed"
+                      placeholder="tu@email.com"
                     />
                   </div>
                 </div>
 
                 <div>
                   <label htmlFor="subject" className="block text-sm font-medium text-neutral-700 mb-2">
-                    Asunto
+                    Asunto *
                   </label>
                   <input
                     type="text"
@@ -144,13 +208,15 @@ export function Contact() {
                     value={formData.subject}
                     onChange={handleChange}
                     required
-                    className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent"
+                    disabled={isSubmitting}
+                    className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent disabled:bg-neutral-100 disabled:cursor-not-allowed"
+                    placeholder="¿De qué quieres hablar?"
                   />
                 </div>
 
                 <div>
                   <label htmlFor="message" className="block text-sm font-medium text-neutral-700 mb-2">
-                    Mensaje
+                    Mensaje *
                   </label>
                   <textarea
                     id="message"
@@ -159,12 +225,26 @@ export function Contact() {
                     onChange={handleChange}
                     required
                     rows={5}
-                    className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent resize-none"
+                    disabled={isSubmitting}
+                    className="w-full px-3 py-2 border border-neutral-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-neutral-900 focus:border-transparent resize-none disabled:bg-neutral-100 disabled:cursor-not-allowed"
+                    placeholder="Cuéntame sobre tu proyecto o idea..."
                   />
                 </div>
 
-                <Button type="submit" size="lg" className="w-full">
-                  Enviar mensaje
+                <Button 
+                  type="submit" 
+                  size="lg" 
+                  className="w-full" 
+                  disabled={isSubmitting}
+                >
+                  {isSubmitting ? (
+                    <>
+                      <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2"></div>
+                      Enviando mensaje...
+                    </>
+                  ) : (
+                    'Enviar mensaje'
+                  )}
                 </Button>
               </form>
             </CardContent>
